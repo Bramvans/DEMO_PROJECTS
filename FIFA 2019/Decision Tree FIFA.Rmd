@@ -1,0 +1,333 @@
+---
+output:
+  html_document: default
+  pdf_document: default
+  word_document: default
+---
+
+---Created By: Bram van Schaik ---
+
+```{r}
+###########################################
+## 0. LOAD & INSTALL PACKAGES - RUN ONCE ##
+###########################################
+## Install packages
+if (!require('pacman')) install.packages('pacman')
+
+## Load packages
+pacman::p_load(
+               rpart,
+               rpart.plot,
+               ggplot2,
+               xlsx,
+               rattle,
+               randomForest,
+               ggcorrplot,
+               pROC,
+               Hmisc,
+               ggpubr,
+               nortest,
+               dplyr
+)
+
+```
+
+```{r}
+##################################################################
+## 1. IMPORT DATA AND SPLITTING IN TRAIN AND TESTSET - RUN ONCE ##
+##################################################################
+
+# Empty Workspace
+rm(list = ls())
+
+# Load in the data
+df = read.csv("C:\\Users\\schai495\\Desktop\\FIFA\\DATA.csv")
+
+```
+
+```{r}
+##################################
+## 1. Exploratory Data Analysis ##
+##################################
+
+# 1. Description of the Wage Data
+describe(df$Wage)
+cat("\n")
+
+# 1.2 How Many unique players are in the data set?
+print("Number of unique player names")
+n_distinct(df$Name, na.rm = TRUE)
+cat("\n")
+
+# 1.3 What is the average wage of the players?
+df %>%
+    dplyr::summarize(Gemmiddelde_Wage = mean(Wage, na.rm=TRUE))
+
+# 1.4 How many missing values are there?
+print("Summary of all columns")
+summary(df)
+cat("\n")
+
+# 1.5 Which players have missing value's?
+DF_NA <- df[which(is.na(df$Crossing)),]
+print("Number of unique players with NA value")
+n_distinct(DF_NA$Name, na.rm = TRUE)
+cat("\n")
+
+# 1.6 Which players have an wage of 0?
+DF_ZERO <- df[which(df$Wage == 0),]
+print("Number of unique players with 0 Wage")
+n_distinct(DF_ZERO$Name, na.rm = TRUE)
+cat("\n")
+
+
+
+```
+
+
+```{r}
+# 2. How is the wage distributed in the dataset?
+
+# Histogram of Wage
+hist(df$Wage, 
+     main="Histogram for Wage", 
+     xlab="Wage", 
+     border="blue", 
+     col="#009000",
+     xlim=c(0,230000),
+     las=1, 
+     breaks=150)
+     
+```
+
+```{r}
+# 3. How is the data distributed?
+
+# QQ Plot 
+Verdeling = ggqqplot(df, x = "Wage",
+                   color = "#009000",
+                   ggtheme = theme_gray())
+
+
+# Normality test (anderson darling)
+P_V <- ad.test(df$Wage)$p.value
+P_V <- data.frame(c(P_V))
+P_V <- format(P_V$c.P_V., scientific=F)
+
+# Labels on the visual
+Verdeling + labs(
+  title = "Distribution of Wage",
+  subtitle = "FIFA Data Set",
+  caption = P_V,
+  x = "Wage", 
+  y = "Number")
+```
+
+```{r}
+# 4. What is the spread of wage?
+
+# Boxplot graph
+ggplot(df, aes(x = "", Wage)) + 
+                 geom_boxplot(notch = F, 
+                 varwidth=T, 
+                 fill="#009000",
+                 color="black", 
+                 outlier.colour="red", 
+                 outlier.shape=16,
+                 outlier.size=2)  + 
+     
+    labs(title="Spread of Wage", 
+         subtitle="FIFA Data Set",
+         caption="Source: Kaggle",
+         x="",
+         y="Wage")  +
+     
+  scale_y_continuous(limits = c(0, 20000))
+
+# Violin Plot
+ggplot(df, aes(x = "", y = Wage)) +
+
+ geom_violin(fill = "#009000") + 
+  labs(title="Violin plot Wage", 
+       subtitle="FIFA Data Set",
+       caption="Source: Kaggle",
+       x="",
+       y="AHT"
+       ) +
+
+stat_summary(fun.y = median, geom="point", size=2, color = "red") +
+     
+     scale_y_continuous(limits = c(0, 20000))
+
+```
+
+
+
+
+```{r}
+#################################
+## 2. CHECK CORRELATION MATRIX ##
+#################################
+
+# create a dataframe without categorical variables
+data = df[ , -which(names(df) %in% c("ï..ID","Name"))]
+
+# remove NA values
+data = na.omit(data)
+
+# add the correlation number
+p.mat <- cor_pmat(data)
+
+# create the correlation plot
+corr <- round(cor(data), 1)
+
+# plot the corrrelation plot
+ggcorrplot(corr,
+
+           type = "upper",
+
+           lab = TRUE,
+
+           outline.col = "white",
+
+           p.mat = p.mat,
+           
+           tl.cex = 8,
+
+           ggtheme = ggplot2::theme_gray,
+
+           colors = c("blue", "white", "#009000"))
+
+
+```
+
+```{r}
+##################################################
+## X. Create an Test and Train set on 1/3 split ##
+##################################################
+
+# split the data in an training an test set
+set.seed(31415)
+index <- 1:nrow(df)
+testindex <- sample(index, trunc(length(index)/3))
+testset <- df[testindex,]
+trainset <- df[-testindex,]
+```
+
+
+```{r}
+##############################
+## 2 Creat the Decission Tree ##
+##############################
+
+
+m1 <- rpart(Wage ~ 
+                 #CHoose your variables 
+                    Reactions 
+                    + Composure  
+                    + BallControl 
+                    #+ Dribbling
+                    #+ Agility
+                    
+            
+            
+            , data = trainset, method = "anova", control = rpart.control(cp = 0.01))
+
+```
+
+
+```{r}
+##############################
+## 2. Plot Your Decision Tree  ##
+##############################
+
+
+fancyRpartPlot(m1, type = 3, digits = -4)
+
+
+```
+
+```{r}
+# show the tree summary
+
+summary(m1)
+
+```
+
+
+```{r}
+
+# Calculate the ROC-curve and the AUC
+predict_tree <- predict(m1, testset)
+roc_tree <- roc(testset$Wage, predict_tree[])
+plot(roc_tree, col='red', main='ROC curve for Tree')
+roc_tree$auc
+
+```
+
+
+```{r}
+######################
+## 3. RANDOM FOREST ##
+######################
+
+df2 = na.omit(trainset)
+
+# 3.1 Estimate the model - THIS WILL TAKE SOME TIME
+forest <- randomForest(Wage ~
+                               
+                         # EDIT HERE - Specify the variables you want to include below (separated by '+')
+                          Reactions 
+                          + Composure  
+                          + BallControl 
+                          #+ Vision
+                          #+ LongPassing
+                       
+                             , data = df2, importance = TRUE
+                             , ntree = 500   # EDIT HERE - Specify the number of trees you want to grow
+)
+
+
+```
+
+
+```{r}
+####################################
+## 3. plot the weigt of variables ##
+####################################
+
+par(xpd=FALSE)
+varImpPlot(forest)
+
+```
+
+
+```{r}
+## Print the ROC-curve
+predict_forest <- predict(forest, testset)
+roc_forest <- roc(testset$Wage,predict_forest[])
+plot(roc_forest, col='red', main = 'ROC curve for RandomForest')
+
+roc_forest$auc
+```
+
+```{r}
+
+#######################
+## 4. COMPARE MODELS ##
+#######################
+# 4 1. Print the AUC for all models
+AUC <- rbind(c("Decision Tree","Random Forest"),c(roc_tree$auc,roc_forest$auc))
+AUC
+
+# 4 2. Print the ROC-curve for all models in one plot
+plot(roc_tree, col='blue', main='ROC curve for the various models.')
+lines.roc(roc_forest, col='green')
+legend(
+  x = "bottomright"
+  ,legend = c("Decision Tree","Random Forest")
+  ,fill = c("blue","green")
+)
+
+```
+
