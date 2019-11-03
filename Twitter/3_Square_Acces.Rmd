@@ -1,0 +1,38 @@
+---
+title: "Twitter RTweet"
+author: "BvS"
+date: "November 2, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+### Load the library foor Rtweet
+
+install.packages("rtweet")
+
+library(rtweet)
+
+```
+```{r}
+### Grab the Tweets
+
+rt = search_tweets('stikstof', n=15000, include_rts = FALSE)
+
+```
+```{r}
+### Save to a dataframe
+
+setwd("C:\\temp")
+
+
+write_as_csv(
+  rt, file_name = "stikstof.csv", 
+  prepend_ids = TRUE, na = "", 
+  fileEncoding = "UTF-8"
+)
+```
